@@ -1,10 +1,19 @@
 import { inject, injectable, optional } from "inversify";
-import { Command, CommandExecutionContext, LocalModelSource, SModelRootImpl, TYPES } from "sprotty";
+import {
+    Command,
+    CommandExecutionContext,
+    LocalModelSource,
+    SModelRootImpl,
+    TYPES,
+    IActionHandler,
+    IActionHandlerInitializer,
+    ActionHandlerRegistry,
+} from "sprotty";
 import { Action, SModelRoot } from "sprotty-protocol";
 import { LabelType, LabelTypeRegistry } from "../labels/labelTypeRegistry";
 import { DynamicChildrenProcessor } from "../dfdElements/dynamicChildren";
 import { EditorMode, EditorModeController } from "../editorMode/editorModeController";
-import { modelFileName } from "../../index";
+import { ws, wsId } from "../../index";
 
 /**
  * Type that contains all data related to a diagram.
@@ -16,14 +25,14 @@ export interface SavedDiagram {
     editorMode?: EditorMode;
 }
 
-export interface SaveDiagramAction extends Action {
-    kind: typeof SaveDiagramAction.KIND;
+export interface AnalyzeDiagramAction extends Action {
+    kind: typeof AnalyzeDiagramAction.KIND;
     suggestedFileName: string;
 }
-export namespace SaveDiagramAction {
-    export const KIND = "save-diagram";
+export namespace AnalyzeDiagramAction {
+    export const KIND = "analyze-diagram";
 
-    export function create(suggestedFileName?: string): SaveDiagramAction {
+    export function create(suggestedFileName?: string): AnalyzeDiagramAction {
         return {
             kind: KIND,
             suggestedFileName: suggestedFileName ?? "diagram.json",
@@ -32,8 +41,8 @@ export namespace SaveDiagramAction {
 }
 
 @injectable()
-export class SaveDiagramCommand extends Command {
-    static readonly KIND = SaveDiagramAction.KIND;
+export class AnalyzeDiagramCommand extends Command {
+    static readonly KIND = AnalyzeDiagramAction.KIND;
     @inject(TYPES.ModelSource)
     private modelSource: LocalModelSource = new LocalModelSource();
     @inject(DynamicChildrenProcessor)
@@ -45,7 +54,7 @@ export class SaveDiagramCommand extends Command {
     @optional()
     private editorModeController?: EditorModeController;
 
-    constructor(@inject(TYPES.Action) private action: SaveDiagramAction) {
+    constructor(@inject(TYPES.Action) private action: AnalyzeDiagramAction) {
         super();
     }
 
@@ -63,22 +72,7 @@ export class SaveDiagramCommand extends Command {
             editorMode: this.editorModeController?.getCurrentMode(),
         };
         const diagramJson = JSON.stringify(diagram, undefined, 4);
-        const jsonBlob = new Blob([diagramJson], { type: "application/json" });
-        const jsonUrl = URL.createObjectURL(jsonBlob);
-
-        // Download the JSON file using a temporary anchor element.
-        // The cleaner way to do this would be showSaveFilePicker(),
-        // but safari and firefox don't support it at the time of writing this code:
-        // https://developer.mozilla.org/en-US/docs/web/api/window/showsavefilepicker#browser_compatibility
-        const tempLink = document.createElement("a");
-        tempLink.href = jsonUrl;
-        tempLink.setAttribute("download", modelFileName + ".json");
-        tempLink.click();
-
-        // Free the url data
-        URL.revokeObjectURL(jsonUrl);
-        tempLink.remove();
-
+        ws.send(wsId + ":Json:" + diagramJson);
         return context.root;
     }
 
